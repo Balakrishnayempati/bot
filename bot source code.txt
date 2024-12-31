@@ -1,0 +1,74 @@
+import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+
+# Bot data storage (simulated in memory for now)
+submissions = {}
+
+def start(update: Update, context: CallbackContext) -> None:
+    """Welcome message and command instructions."""
+    update.message.reply_text(
+        "Welcome to Dev-PV Bot!\n"
+        "Commands:\n"
+        "/submit - Submit an assignment\n"
+        "/status - Check your submission status\n"
+        "/review - Admin only: View all submissions"
+    )
+
+def submit(update: Update, context: CallbackContext) -> None:
+    """Initiate assignment submission."""
+    user_id = update.effective_user.id
+    user_name = update.effective_user.first_name
+    submissions[user_id] = {"name": user_name, "status": "Pending"}
+    update.message.reply_text("Please send your assignment as text, file, or link.")
+
+def handle_submission(update: Update, context: CallbackContext) -> None:
+    """Handle assignment details."""
+    user_id = update.effective_user.id
+    if user_id in submissions and submissions[user_id]["status"] == "Pending":
+        details = update.message.text or "File submitted"
+        submissions[user_id]["details"] = details
+        submissions[user_id]["status"] = "Submitted"
+        update.message.reply_text("Your assignment has been submitted successfully!")
+    else:
+        update.message.reply_text("Use /submit to start the submission process.")
+
+def status(update: Update, context: CallbackContext) -> None:
+    """Check submission status."""
+    user_id = update.effective_user.id
+    if user_id in submissions:
+        update.message.reply_text(
+            f"Status: {submissions[user_id]['status']}\n"
+            f"Details: {submissions[user_id].get('details', 'No details provided')}"
+        )
+    else:
+        update.message.reply_text("No submission found. Use /submit to start.")
+
+def review(update: Update, context: CallbackContext) -> None:
+    """Admin command to review submissions."""
+    admin_id = os.getenv("ADMIN_ID")
+    if str(update.effective_user.id) == admin_id:
+        reviews = "\n".join(
+            [f"{data['name']}: {data['status']}" for data in submissions.values()]
+        )
+        update.message.reply_text(reviews or "No submissions yet.")
+    else:
+        update.message.reply_text("You are not authorized to use this command.")
+
+def main():
+    """Main function to start the bot."""
+    token = os.getenv("TELEGRAM_TOKEN")
+    updater = Updater(token)
+    dispatcher = updater.dispatcher
+
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("submit", submit))
+    dispatcher.add_handler(CommandHandler("status", status))
+    dispatcher.add_handler(CommandHandler("review", review))
+    dispatcher.add_handler(MessageHandler(Filters.text | Filters.document, handle_submission))
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == "__main__":
+    main()
